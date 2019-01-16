@@ -1,0 +1,58 @@
+import PyPDF2 as PyPDF2
+import spacy
+import textacy
+
+filename = 'Document1.pdf' #Where filename = the given document
+
+f = open(filename, 'rb')
+pdfReader = PyPDF2.PdfFileReader(f)
+num_pages = pdfReader.numPages
+
+count = 0
+text = ""
+
+while count < num_pages:
+    pageObj = pdfReader.getPage(count)
+    count += 1
+    text += pageObj.extractText()
+
+def nstrip(string):                             # function to remove line breaks '\n'
+    string = ''.join((string.split("\\n")))
+    return string
+
+nlp = spacy.load('en')
+
+text = str(text)
+text = nstrip(text)
+text = textacy.preprocess_text(text, no_punct=False)
+doc = nlp(text)
+
+entarr = []
+ents = []
+
+nlp = spacy.load('en_core_web_sm')
+doc = nlp(text)
+for entity in doc:
+    if entity.ent_type_ != "":
+        if entity.ent_type_ not in entarr:
+            entarr.append(entity.ent_type_)
+        if len(ents) != len(entarr):
+            ents.append([])
+        ents[entarr.index(entity.ent_type_)].append(entity)
+
+def allent():
+    en = input("\nPlease input an entity type\n   > ")
+    if str.upper(en) in entarr:
+        print(ents[entarr.index(str.upper(en))])
+    else:
+        print("Entity type not present in document")
+
+while True:
+    print("\nINTERFACE")
+    print("[1] Input: Entity Type; Output: List")
+    print("[2] Exit")
+    s = input("> ")
+    if s == "1":
+        allent()
+    elif s == "2":
+        break
