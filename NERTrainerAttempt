@@ -1,0 +1,172 @@
+from __future__ import unicode_literals, print_function
+import spacy
+from spacy.matcher import PhraseMatcher
+import plac
+import random
+from pathlib import Path
+from spacy.util import minibatch, compounding
+
+nlp = spacy.load('en')
+matcher = PhraseMatcher(nlp.vocab)
+
+def stepone(FILENAME, CONTENTS, LABEL):
+    f = open(FILENAME,"r")
+    gilename = "gatrain.txt"
+    g = open(gilename,"w")
+
+    data1 = []
+    data2 = []
+    while True:
+        line = f.readline()
+        line = line[:-1]
+        if len(line) == 0:
+            break
+        for x in CONTENTS:
+            matcher.add(LABEL, None, x)
+        matches = matcher(nlp(line))
+        for match_id, start, end in matches:
+            data1.append([line,start,end])
+
+    for i in data1:
+        s = len(str(nlp(i[0])[0:i[1]]))
+        lenp = str(nlp(i[0])[i[1]:i[2]])
+        e = s + len(lenp)
+        data2.append([s,e,str(i[0])])
+
+    for j in data2:
+        for h in j:
+            g.writelines(str(h)+"\n")
+
+    f.close()
+    g.close()
+    return gilename
+
+def steptwo(GILENAME, LABEL, TEST_TEXT):
+    TRAIN_DATA = []
+
+    f = open(GILENAME,"r")
+
+    counter = 0
+    hold = []
+    while True:
+        line = f.readline()
+        if len(line) == 0:
+            break
+
+        line = line[:-1]
+        counter += 1
+        if counter%3 == 1:
+            temp = int(line)
+            hold.append(temp)
+        elif counter%3 == 2:
+            temp = int(line)
+            hold.append(temp)
+            hold.append(LABEL)
+            hold = tuple(hold)
+            dic = {"entities":[hold]}
+        else:
+            entry = (line, dic)
+            TRAIN_DATA.append(entry)
+            hold = []
+
+    @plac.annotations(
+        model=("Model name. Defaults to blank 'en' model.", "option", "m", str),
+        new_model_name=("New model name for model meta.", "option", "nm", str),
+        output_dir=("Optional output directory", "option", "o", Path),
+        n_iter=("Number of training iterations", "option", "n", int),
+    )
+    def main(model=None, new_model_name="animal", output_dir=None, n_iter=20):
+        """Set up the pipeline and entity recognizer, and train the new entity."""
+        if model is not None:
+            nlp = spacy.load(model)  # load existing spaCy model
+            print("Loaded model '%s'" % model)
+        else:
+            nlp = spacy.blank("en")  # create blank Language class
+            print("Created blank 'en' model")
+        # Add entity recognizer to model if it's not in the pipeline
+        # nlp.create_pipe works for built-ins that are registered with spaCy
+        if "ner" not in nlp.pipe_names:
+            ner = nlp.create_pipe("ner")
+            nlp.add_pipe(ner)
+        # otherwise, get it, so we can add labels to it
+        else:
+            ner = nlp.get_pipe("ner")
+
+        ner.add_label(LABEL)  # add new entity label to entity recognizer
+        if model is None:
+            optimizer = nlp.begin_training()
+        else:
+            # Note that 'begin_training' initializes the models, so it'll zero out
+            # existing entity types.
+            optimizer = nlp.entity.create_optimizer()
+
+        # get names of other pipes to disable them during training
+        other_pipes = [pipe for pipe in nlp.pipe_names if pipe != "ner"]
+        with nlp.disable_pipes(*other_pipes):  # only train NER
+            for itn in range(n_iter):
+                random.shuffle(TRAIN_DATA)
+                losses = {}
+                # batch up the examples using spaCy's minibatch
+                batches = minibatch(TRAIN_DATA, size=compounding(4.0, 32.0, 1.001))
+                for batch in batches:
+                    texts, annotations = zip(*batch)
+                    nlp.update(texts, annotations, sgd=optimizer, drop=0.35, losses=losses)
+                print("Losses", losses)
+
+        # test the trained model
+        doc = nlp(TEST_TEXT)
+        print("Entities in '%s'" % TEST_TEXT)
+        for ent in doc.ents:
+            print(ent.label_, ent.text)
+
+        # save model to output directory
+        if output_dir is not None:
+            output_dir = Path(output_dir)
+            if not output_dir.exists():
+                output_dir.mkdir()
+            nlp.meta["name"] = new_model_name  # rename model
+            nlp.to_disk(output_dir)
+            print("Saved model to", output_dir)
+
+            # test the saved model
+            print("Loading from", output_dir)
+            nlp2 = spacy.load(output_dir)
+            doc2 = nlp2(test_text)
+            for ent in doc2.ents:
+                print(ent.label_, ent.text)
+
+
+    if __name__ == "__main__":
+        plac.call(main)
+
+def letsgo(FILENAME,CONTENTS,LABEL,TEST_TEXT):
+    """
+    So!!!!
+    FILENAME -> The file where the data is in. Important to make sure only one match in each line and that all are relevant... for now
+    CONTENTS -> Array which has the relevant words which should map to a certain entity
+    LABEL -> Label name for the match up but also for the entity type name
+    GILENAME -> The training file name containing the data that is passed from stepone() to steptwo()
+    TEST_TEXT -> Test you can enter to test the NER
+
+    """
+    steptwo(stepone(FILENAME, CONTENTS, LABEL),LABEL,TEST_TEXT)
+
+while True:
+    print("\nINTERFACE")
+    print("[1] Train NER")
+    print("[2] Exit")
+    s = input("> ")
+    if s == "1":
+        bb = []
+        a = input("\nPlease input the filename of your training data\n   > ")
+        while True:
+            b = input("\nPlease input keyword\n   > ")
+            bb.append(nlp(b))
+            done = input("\nHave all keywords been entered?(y/n)\n   > ")
+            if done == "y":
+                break
+        c = input("\nPlease input the entity label\n   > ")
+        d = input("\nPlease input some test text\n   > ")
+        letsgo(a,bb,c,d)
+    elif s == "2":
+        break
