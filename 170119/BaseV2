@@ -1,0 +1,189 @@
+import spacy
+import textacy
+import re
+from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
+from pdfminer.converter import TextConverter
+from pdfminer.layout import LAParams
+from pdfminer.pdfpage import PDFPage
+from io import StringIO
+from docx import Document
+
+nlp = spacy.load('en_core_web_sm')
+
+def convert_pdf_to_txt(path):
+    rsrcmgr = PDFResourceManager()
+    retstr = StringIO()
+    codec = 'utf-8'
+    laparams = LAParams()
+    device = TextConverter(rsrcmgr, retstr, codec=codec, laparams=laparams)
+    fp = open(path, 'rb')
+    interpreter = PDFPageInterpreter(rsrcmgr, device)
+    password = ""
+    maxpages = 0
+    caching = True
+    pagenos=set()
+
+    for page in PDFPage.get_pages(fp, pagenos, maxpages=maxpages, password=password,caching=caching, check_extractable=True):
+        interpreter.process_page(page)
+
+    text = retstr.getvalue()
+
+    fp.close()
+    device.close()
+    retstr.close()
+    return text
+
+def nstrip(string):
+    string = ''.join((string.split("\n\n")))
+    string = ' '.join((string.split()))
+    return string
+
+def nerextract(keyword, text):
+    text = text.split("\n")
+
+    nlp = spacy.load('en_core_web_sm')
+
+    f = open("doctext.txt","w")
+    for s in text:
+        print(s)
+        if str(s).count(keyword) == 1:
+            f.write(str(s)+"\n")
+
+    f.close()
+
+entarr = []
+ents = []
+
+def entgrind(text):
+    nlp = spacy.load('en')
+
+    text = str(text)
+    text = nstrip(text)
+    text = textacy.preprocess_text(text, no_punct=False)
+    doc = nlp(text)
+
+    nlp = spacy.load('en_core_web_sm')
+    doc = nlp(text)
+    for entity in doc:
+        if entity.ent_type_ != "":
+            if entity.ent_type_ not in entarr:
+                entarr.append(entity.ent_type_)
+            if len(ents) != len(entarr):
+                ents.append([])
+            ents[entarr.index(entity.ent_type_)].append(entity)
+
+def allent():
+    entgrind(nntext)
+    en = input("\nPlease input an entity type\n   > ")
+    if str.upper(en) in entarr:
+        print("")
+        print(ents[entarr.index(str.upper(en))])
+    else:
+        print("Entity type not present in document")
+
+def yn(q):
+    ans = input(q)
+    while ans not in ["y","n"]:
+        print("\nInvalid answer\n")
+        ans = input(q)
+    return ans
+
+def viewc(a,b):
+    a = nstrip(a)
+    b = nstrip(b)
+
+    sen = []
+    new = []
+
+    text = nlp(b)
+    count = -1
+    for sent in text.sents:
+        count += 1
+        sen.append(sent.text)
+        if sent.text not in a:
+            new.append((sent.text,count))
+
+    def yn(q):
+        ans = input(q)
+        while ans not in ["y","n"]:
+            print("\nInvalid answer\n")
+            ans = input(q)
+        return ans
+
+    cc = 0
+    print(str(len(new)),"edits found.")
+    for se,pg in new:
+        cc += 1
+        print("\nEdit",str(cc))
+        print("\nCurrent: "+str(se))
+        ar = input("\nAccept?(y/n)\n   > ")
+        if ar == "n":
+            c = yn("\nMake changes now?(y/n)\n   > ")
+            if c == "y":
+                while True:
+                    nl = input("\nInput change\n   > ")
+                    print("\nChange: "+nl)
+                    acm = yn("\nAccept change?(y/n)\n   > ")
+                    if acm == "y":
+                        sen[pg] = nl
+                        break
+
+    document = Document()
+    for i in sen:
+        p = document.add_paragraph(str(i))
+
+    document.save('demo.docx')
+
+def flaag(doc):
+    """
+    lia_trig -> Trigger words regarding liability
+    trn_trig -> Trigger words regarding transfer
+    """
+    doc = nstrip(doc)
+    nlp = spacy.load("/Users/nicolechoong/PycharmProjects/untitled")
+    nlp.add_pipe(nlp.create_pipe('sentencizer'))
+    doc = nlp(doc)
+
+    lia_trig = ["zero","actual"]
+    trn_trig = ["of rights"]
+    trig = [lia_trig,trn_trig]
+    flag = []
+
+    label = ["LIA","TRN"]
+
+    for s in doc.sents:
+        for e in s.ents:
+            for i in range(0,2):
+                if e.label_ == label[i]:
+                    for x in trig[i]:
+                        if x in str(s) and s not in flag:
+                            flag.append(s)
+
+    print(str(len(flag))+" flags found.")
+    for i in range(0,len(flag)):
+        print("\nFlag "+str(i+1))
+        print(flag[i])
+
+#/Users/nicolechoong/PycharmProjects/untitled/not2real.pdf
+#/Users/nicolechoong/PycharmProjects/untitled/LMA copy.pdf
+#/Users/nicolechoong/PycharmProjects/untitled/not2real copy.pdf
+
+old = input("Insert path to previous document\n   > ")
+new = input("\nInsert path to current document\n   > ")
+ootext = convert_pdf_to_txt(old)
+nntext = convert_pdf_to_txt(new)
+while True:
+    print("\nINTERFACE")
+    print("[1] Input: Entity Type; Output: List")
+    print("[2] View changes")
+    print("[3] View keywords")
+    print("[4] Exit")
+    s = input("> ")
+    if s == "1":
+        allent()
+    elif s == "2":
+        viewc(ootext,nntext)
+    elif s == "3":
+        flaag(nntext)
+    elif s == "4":
+        break
