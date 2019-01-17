@@ -1,0 +1,180 @@
+import spacy
+import textacy
+import re
+from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
+from pdfminer.converter import TextConverter
+from pdfminer.layout import LAParams
+from pdfminer.pdfpage import PDFPage
+from io import StringIO
+
+def convert_pdf_to_txt(path):
+    rsrcmgr = PDFResourceManager()
+    retstr = StringIO()
+    codec = 'utf-8'
+    laparams = LAParams()
+    device = TextConverter(rsrcmgr, retstr, codec=codec, laparams=laparams)
+    fp = open(path, 'rb')
+    interpreter = PDFPageInterpreter(rsrcmgr, device)
+    password = ""
+    maxpages = 0
+    caching = True
+    pagenos=set()
+
+    for page in PDFPage.get_pages(fp, pagenos, maxpages=maxpages, password=password,caching=caching, check_extractable=True):
+        interpreter.process_page(page)
+
+    text = retstr.getvalue()
+
+    fp.close()
+    device.close()
+    retstr.close()
+    return text
+
+#/Users/nicolechoong/PycharmProjects/untitled/LMA copy.pdf
+
+def nstrip(string):                             # function to remove line breaks '\n'
+    string = ''.join((string.split("\\n")))
+    return string
+
+def nerextract(new):
+    keyword = "asset"
+    text = convert_pdf_to_txt(new)
+    text = text.split("\n")
+
+    nlp = spacy.load('en_core_web_sm')
+
+    f = open("doctext.txt","w")
+    for s in text:
+        print(s)
+        if str(s).count(keyword) == 1:
+            f.write(str(s)+"\n")
+
+    f.close()
+
+entarr = []
+ents = []
+
+def entgrind(text):
+    nlp = spacy.load('en')
+
+    text = str(text)
+    text = nstrip(text)
+    text = textacy.preprocess_text(text, no_punct=False)
+    doc = nlp(text)
+
+    nlp = spacy.load('en_core_web_sm')
+    doc = nlp(text)
+    for entity in doc:
+        if entity.ent_type_ != "":
+            if entity.ent_type_ not in entarr:
+                entarr.append(entity.ent_type_)
+            if len(ents) != len(entarr):
+                ents.append([])
+            ents[entarr.index(entity.ent_type_)].append(entity)
+
+def allent():
+    entgrind(text)
+    en = input("\nPlease input an entity type\n   > ")
+    if str.upper(en) in entarr:
+        print("")
+        print(ents[entarr.index(str.upper(en))])
+    else:
+        print("Entity type not present in document")
+
+def viewc(old,new):
+    """
+    As of now limited to documents of the same length because it compares line by line in order.
+    """
+
+    f = open(old, 'r')
+
+    a = []
+    while True:
+        line = f.readline()
+        if len(line) == 0:
+            break
+        a.append(line[:-1])
+
+    g = open(new, 'r')
+
+    b = []
+    complaint = []
+    ai = []
+    count = 0
+    while True:
+        count += 1
+        line = g.readline()
+        if len(line) == 0:
+            break
+        b.append(line[:-1])
+        line = line[:-1]
+        if line not in a:
+            for i in range(0,len(b)):
+                if a[i] != b[i] and b[i] not in a:
+                    if a.index(a[i]) not in ai:
+                        ai.append(a.index(a[i]))
+                        complaint.append((count, a[i], line))
+
+    def comgen(n,j,m):
+        if j != 0:
+            if n != a[j-1]:
+                return comgen(n, j-1, m+1)
+            else:
+                complaint.append(b.index(n),)
+        else:
+            return(0, a[0],n)
+
+
+    for i in range(0,len(b)):
+        if b[i] not in a:
+            comgen(b[i],i,0)
+
+    cc = 0
+    print("\n"+str(len(complaint)),"edits found.")
+    for pg,ai,se in complaint:
+        cc += 1
+        print("\nEdit",str(cc),"found on line",str(pg))
+        print("Previous: "+ai)
+        print("Current: "+str(se))
+        ar = input("\nAccept?(y/n)\n   > ")
+        if ar == "n":
+            c = input("\nMake changes now?(y/n)\n   > ")
+            if c == "y":
+                while True:
+                    nl = input("\nInput change\n   > ")
+                    print("\nChange: "+nl)
+                    acm = input("\nAccept change?(y/n)\n   > ")
+                    if acm == "y":
+                        b[pg-1] = nl
+                        break
+
+    e = []
+    for i in b:
+        i += "\n"
+        e.append(i)
+
+    with open(new, 'w') as file:
+        file.writelines(e)
+
+    f.close()
+    g.close()
+
+
+
+old = input("Select old document\n   > ")
+new = input("\nSelect new document\n   > ")
+while True:
+    print("\nINTERFACE")
+    print("[1] Input: Entity Type; Output: List")
+    print("[2] View changes    # NOTE: ONLY WORKS WITH .txt FOR NOW")
+    print("[3] View keywords   # NOTE: ONLY WORKS WITH .pdf FOR NOW")
+    print("[4] Exit")
+    s = input("> ")
+    if s == "1":
+        allent()
+    elif s == "2":
+        viewc(old,new)
+    elif s == "3":
+        nerextract(new)
+    elif s == "4":
+        break
