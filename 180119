@@ -1,0 +1,185 @@
+import spacy
+import copy
+import textacy
+import re
+from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
+from pdfminer.converter import TextConverter
+from pdfminer.layout import LAParams
+from pdfminer.pdfpage import PDFPage
+from io import StringIO
+from docx import Document
+from docx.enum.text import WD_COLOR_INDEX
+
+nlp = spacy.load('en_core_web_sm')
+
+def convert_pdf_to_txt(path):
+    rsrcmgr = PDFResourceManager()
+    retstr = StringIO()
+    codec = 'utf-8'
+    laparams = LAParams()
+    device = TextConverter(rsrcmgr, retstr, codec=codec, laparams=laparams)
+    fp = open(path, 'rb')
+    interpreter = PDFPageInterpreter(rsrcmgr, device)
+    password = ""
+    maxpages = 0
+    caching = True
+    pagenos=set()
+
+    for page in PDFPage.get_pages(fp, pagenos, maxpages=maxpages, password=password,caching=caching, check_extractable=True):
+        interpreter.process_page(page)
+
+    text = retstr.getvalue()
+
+    fp.close()
+    device.close()
+    retstr.close()
+    return text
+
+def nstrip(string):
+    string = ''.join((string.split("\n\n")))
+    string = ' '.join((string.split()))
+    return string
+
+def yn(q):
+    ans = input(q)
+    while ans not in ["y","n"]:
+        print("\nInvalid answer\n")
+        ans = input(q)
+    return ans
+
+accept = ["Transfer of rights","Actual liability"]
+reject = ["Zero liability"]
+
+def policy(accept,reject):
+    newa = copy.deepcopy(accept)
+    newr = copy.deepcopy(reject)
+    print("\nAccept contracts with:")
+    for a in range(0,len(accept)):
+        print("\n"+accept[a])
+        correct = yn("\nChange?(y/n)\n   > ")
+        if correct == "y":
+            c = yn("\nReject?(y/n)\n   > ")
+            if c == "y":
+                clause = accept[a]
+                newa.remove(accept[a])
+                newr.append(clause)
+    print("\nReject contracts with:")
+    for r in range(0,len(reject)):
+        print("\n"+reject[r])
+        correct = yn("\nChange?(y/n)\n   > ")
+        if correct == "y":
+            c = yn("\nReject?(y/n)\n   > ")
+            if c == "y":
+                clause = accept[a]
+                newr.remove(reject[r])
+                newa.append(clause)
+    return [newa,newr]
+
+def viewc(a,b):
+    a = nstrip(a)
+    b = nstrip(b)
+
+    sen = []
+    new = []
+
+    text = nlp(b)
+    count = -1
+    for sent in text.sents:
+        count += 1
+        sen.append(sent.text)
+        if sent.text not in a:
+            new.append((sent.text,count))
+
+    cc = 0
+    print("\n"+str(len(new)),"edits found.")
+    for se,pg in new:
+        cc += 1
+        print("\nEdit",str(cc))
+        print("\nCurrent: "+str(se))
+        ar = input("\nAccept?(y/n)\n   > ")
+        if ar == "n":
+            c = yn("\nMake changes now?(y/n)\n   > ")
+            if c == "y":
+                while True:
+                    nl = input("\nInput change\n   > ")
+                    print("\nChange: "+nl)
+                    acm = yn("\nAccept change?(y/n)\n   > ")
+                    if acm == "y":
+                        sen[pg] = nl
+                        break
+
+    document = Document()
+    for i in sen:
+        p = document.add_paragraph(str(i))
+
+    document.save('demo.docx')
+
+def flaag(doc):
+    doc = nstrip(doc)
+    nlp = spacy.load("/Users/nicolechoong/PycharmProjects/untitled")
+    nlp.add_pipe(nlp.create_pipe('sentencizer'))
+    doc = nlp(doc)
+    flag = []
+
+    for s in doc.sents:
+        notin = 0
+        for i in reject:
+            for j in i:
+                if str.lower(j) not in str.lower(str(s)):
+                    notin = 1
+            if notin == 0 and s not in flag:
+                flag.append(s)
+
+    print("\n"+str(len(flag))+" flags found.")
+    for i in range(0,len(flag)):
+        print("\nFlag "+str(i+1))
+        print(flag[i])
+
+    document = Document()
+
+    for sen in doc.sents:
+        p = document.add_paragraph()
+        if sen in flag:
+            p.add_run(str(sen)).font.highlight_color = WD_COLOR_INDEX.RED
+        else:
+            p.add_run(str(sen)).font.highlight_color = WD_COLOR_INDEX.WHITE
+
+    document.save('demo.docx')
+
+def setupdoc(text):
+    text = nstrip(text)
+    document = Document()
+    for sen in nlp(text).sents:
+        p = document.add_paragraph(str(sen))
+    document.save('demo.docx')
+
+#/Users/nicolechoong/PycharmProjects/untitled/not2real.pdf
+#/Users/nicolechoong/PycharmProjects/untitled/not2real copy.pdf
+
+old = input("Insert path to previous document\n   > ")
+new = input("\nInsert path to current document\n   > ")
+ootext = convert_pdf_to_txt(old)
+nntext = convert_pdf_to_txt(new)
+setupdoc(nntext)
+
+while True:
+    print("\nINTERFACE")
+    print("[1] Enter Policy side")
+    print("[2] View changes")
+    print("[3] View keywords")
+    print("[4] Exit")
+    s = input("> ")
+    if s == "1":
+        a = policy(accept,reject)
+        accept = []
+        reject = []
+        for i in a[0]:
+            accept.append(i)
+        for i in a[1]:
+            reject.append(i)
+    elif s == "2":
+        viewc(ootext,nntext)
+    elif s == "3":
+        flaag(nntext)
+    elif s == "4":
+        break
